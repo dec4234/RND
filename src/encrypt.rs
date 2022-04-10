@@ -1,4 +1,5 @@
 use magic_crypt::{new_magic_crypt, MagicCryptTrait, MagicCrypt128, MagicCryptError};
+use serde::{Deserialize, Serialize};
 
 pub struct Encryptor {
     mc: MagicCrypt128,
@@ -17,5 +18,20 @@ impl Encryptor {
 
     pub fn decrypt(&self, input: String) -> Result<String, MagicCryptError> {
         self.mc.decrypt_base64_to_string(input)
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+pub struct Packet {
+    pub title: String,
+    pub body: String,
+}
+
+impl Packet {
+    pub fn new(title: String, body: String) -> Self {
+        Self {
+            title,
+            body,
+        }
     }
 }
