@@ -11,6 +11,14 @@ impl Encryptor {
             mc: new_magic_crypt!(key.as_str(), 128),
         }
     }
+    
+    /*
+    pub fn new_bits(key: [u8; 32]) -> Self {
+        Self {
+            mc: new_magic_crypt!(key, 256),
+        }
+    }
+     */
 
     pub fn encrypt(&self, input: String) -> String {
         self.mc.encrypt_str_to_base64(input.as_str())
@@ -20,6 +28,8 @@ impl Encryptor {
         self.mc.decrypt_base64_to_string(input)
     }
 }
+
+
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Packet {

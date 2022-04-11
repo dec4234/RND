@@ -37,7 +37,7 @@ impl Server {
 
     pub fn start_listening(&mut self) -> Result<()> {
 
-        let mpsc = mpsc::channel();
+        // let mpsc = mpsc::channel();
 
         thread::spawn(move || {
 
