@@ -1,20 +1,17 @@
 use std::io::{Error, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::thread;
-use std::time::Duration;
-use rand_core::OsRng;
-use serde::Serialize;
-use serde_json::Value;
+use std::sync::mpsc;
 use crate::encrypt::{Encryptor, Packet};
 use uuid::Uuid;
-
 use ristretto255_dh::{EphemeralSecret, PublicKey};
+use crate::protocol::{Client, Server};
 
 pub mod encrypt;
 pub mod protocol;
 
 #[tokio::main]
 async fn main() {
+    /*
     let server_secret = EphemeralSecret::new(&mut OsRng);
     let server_public = PublicKey::from(&server_secret);
 
@@ -81,6 +78,19 @@ async fn main() {
             thread::sleep(Duration::from_secs(5));
         }
     });
+     */
+
+    let s = Server::new("127.0.0.1:27893").unwrap();
+    let mut c = Client::new("127.0.0.1:27893").unwrap();
+    let mpsc = mpsc::channel::<String>();
+
+    s.start_listening(mpsc.0).unwrap();
+
+    c.send_string("ablgiblfkgbkgbrkjbgkrbkrbglkrjbkgbrkjbrklrbkgbr".to_string()).unwrap();
+
+    for m in mpsc.1.iter() {
+        println!("{}", m);
+    }
 
     loop {
 
