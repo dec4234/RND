@@ -1,6 +1,8 @@
 use std::io::{Error, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 use crate::encrypt::{Encryptor, Packet};
 use uuid::Uuid;
 use ristretto255_dh::{EphemeralSecret, PublicKey};
@@ -86,7 +88,12 @@ async fn main() {
 
     s.start_listening(mpsc.0).unwrap();
 
-    c.send_string("ablgiblfkgbkgbrkjbgkrbkrbglkrjbkgbrkjbrklrbkgbr".to_string()).unwrap();
+    thread::spawn(move || {
+        loop {
+            c.send_string("ablgiblfkgbkgbrkjbgkrbkrbglkrjbkgbrkjbrklrbkgbrjgfkbgf".to_string()).unwrap();
+            thread::sleep(Duration::from_secs(5));
+        }
+    });
 
     for m in mpsc.1.iter() {
         println!("{}", m);

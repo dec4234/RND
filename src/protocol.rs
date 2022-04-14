@@ -74,3 +74,10 @@ impl Server {
         Ok(())
     }
 }
+
+#[macro_export]
+macro_rules! define_protocol {
+    ($version: literal, $packet: ident) => {
+
+    };
+}
