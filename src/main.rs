@@ -6,7 +6,7 @@ use std::time::Duration;
 use crate::encrypt::{Encryptor, Packet};
 use uuid::Uuid;
 use ristretto255_dh::{EphemeralSecret, PublicKey};
-use crate::protocol::{Client, Server};
+use crate::protocol::{Client, Server, PacketDirection};
 
 pub mod encrypt;
 pub mod protocol;
@@ -103,5 +103,14 @@ async fn main() {
 
     }
 }
+
+define_protocol!(1, Packet1, RawPacket1, RawPacket1Body, RawPacket1Kind => {
+    Handshake, 0x00, ServerBound => HandshakeSpec {
+        payload: i64,
+    },
+    Message, 0x01, Both => MessageSpec {
+        payload: String,
+    }
+});
 
 
