@@ -30,7 +30,7 @@ impl Encryptor {
 }
 
 
-
+/*
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Packet {
     pub title: String,
@@ -45,3 +45,4 @@ impl Packet {
         }
     }
 }
+*/

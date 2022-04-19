@@ -1,15 +1,24 @@
+use std::borrow::BorrowMut;
 use std::io::{Error, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
-use crate::encrypt::{Encryptor, Packet};
+use crate::encrypt::{Encryptor};
 use uuid::Uuid;
 use ristretto255_dh::{EphemeralSecret, PublicKey};
-use crate::protocol::{Client, Server, PacketDirection};
+use crate::protocol::{PacketDirection};
+use serde::{Serialize, Deserialize};
+use crate::client::Client;
+use crate::Packet1::MessageSpec;
+use crate::Packet1::Packet1 as Packet;
+use crate::server::Server;
 
 pub mod encrypt;
 pub mod protocol;
+pub mod Packet1;
+pub mod server;
+pub mod client;
 
 #[tokio::main]
 async fn main() {
@@ -82,35 +91,56 @@ async fn main() {
     });
      */
 
-    let s = Server::new("127.0.0.1:27893").unwrap();
-    let mut c = Client::new("127.0.0.1:27893").unwrap();
-    let mpsc = mpsc::channel::<String>();
+    /*
+    let mpsc = tokio::sync::mpsc::channel::<Packet>(256);
 
-    s.start_listening(mpsc.0).unwrap();
-
-    thread::spawn(move || {
-        loop {
-            c.send_string("ablgiblfkgbkgbrkjbgkrbkrbglkrjbkgbrkjbrklrbkgbrjgfkbgf".to_string()).unwrap();
-            thread::sleep(Duration::from_secs(5));
-        }
-    });
+    s.accept_incoming(mpsc.0).await.unwrap();
 
     for m in mpsc.1.iter() {
         println!("{}", m);
     }
 
     loop {
+        c.send_string("ablgiblfkgbkgbrkjbgkrbkrbglkrjbkgbrkjbrklrbkgbrjgfkbgf".to_string()).await.unwrap();
+        thread::sleep(Duration::from_secs(5));
+    }
+    */
+
+    start_loop().await;
+
+    loop {
+        let p = Packet::Message(MessageSpec {
+            payload: String::from("")
+        });
+
 
     }
 }
 
-define_protocol!(1, Packet1, RawPacket1, RawPacket1Body, RawPacket1Kind => {
-    Handshake, 0x00, ServerBound => HandshakeSpec {
-        payload: i64,
-    },
-    Message, 0x01, Both => MessageSpec {
-        payload: String,
+async fn start_loop() {
+    let mut s = Server::new("127.0.0.1:27893").await.unwrap();
+    let mut c = Client::new("127.0.0.1:27893").await.unwrap();
+
+    let mut cc = s.accept().await.unwrap();
+
+    loop {
+        c.send_packet(Packet::Message(MessageSpec {
+            payload: String::from("Hey lhbglhasbgfhbldjfbgljrhbgtilhbgljvbljbfg")
+        })).await.unwrap();
+
+        let p = cc.read_incoming_packet().await.unwrap();
+
+        match p {
+            Packet::Handshake(payload) => {
+                println!("{}", payload.payload);
+            }
+            Packet::Message(payload) => {
+                println!("{}", payload.payload);
+            }
+        }
+
+        thread::sleep(Duration::from_secs(3));
     }
-});
+}
 
 
