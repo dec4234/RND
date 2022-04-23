@@ -4,6 +4,7 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+use rand_core::OsRng;
 use crate::encrypt::{Encryptor};
 use uuid::Uuid;
 use ristretto255_dh::{EphemeralSecret, PublicKey};
@@ -123,6 +124,11 @@ async fn start_loop() {
 
     let mut cc = s.accept().await.unwrap();
 
+    // Enable encryption
+    c.enable_encryption().await.unwrap();
+    cc.enable_encryption().await.unwrap();
+    c.enable_encryption_final().await.unwrap();
+
     loop {
         c.send_packet(Packet::Message(MessageSpec {
             payload: String::from("Hey lhbglhasbgfhbldjfbgljrhbgtilhbgljvbljbfg")
@@ -137,6 +143,7 @@ async fn start_loop() {
             Packet::Message(payload) => {
                 println!("{}", payload.payload);
             }
+            _ => {}
         }
 
         thread::sleep(Duration::from_secs(3));

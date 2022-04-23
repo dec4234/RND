@@ -1,5 +1,7 @@
+use ristretto255_dh::PublicKey;
 use serde::{Deserialize, Serialize};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+use anyhow::Result;
 
 pub trait PacketKind: Clone + Copy + PartialEq + Eq {
 
@@ -69,4 +71,27 @@ macro_rules! as_item {
     ($i:item) => {
         $i
     };
+}
+
+#[macro_export]
+macro_rules! encrypt_packet {
+    ($name: ident, $fname: ident) => {
+        $crate::as_item! {
+            #[derive(Deserialize, Serialize)]
+            pub struct $name<'a> {
+                pub $fname: &'a [u8],
+            }
+        }
+
+    };
+}
+
+encrypt_packet!(CEEEP, cpp);
+
+pub fn to_bytes(key: PublicKey) -> [u8; 32] {
+    key.try_into().unwrap()
+}
+
+pub fn from_bytes(bytes: [u8; 32]) -> PublicKey {
+    PublicKey::try_from(bytes).unwrap()
 }

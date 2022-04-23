@@ -11,6 +11,12 @@ impl Encryptor {
             mc: new_magic_crypt!(key.as_str(), 128),
         }
     }
+
+    pub fn from_bytes(key: [u8; 32]) -> Self {
+        Self {
+            mc: new_magic_crypt!(String::from_utf8_lossy(&key), 128),
+        }
+    }
     
     /*
     pub fn new_bits(key: [u8; 32]) -> Self {
@@ -27,22 +33,14 @@ impl Encryptor {
     pub fn decrypt(&self, input: String) -> Result<String, MagicCryptError> {
         self.mc.decrypt_base64_to_string(input)
     }
-}
 
+    pub fn encrypt_bytes(&self, bytes: Vec<u8>) -> String {
+        self.mc.encrypt_bytes_to_base64(&bytes)
+    }
 
-/*
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Packet {
-    pub title: String,
-    pub body: String,
-}
-
-impl Packet {
-    pub fn new(title: String, body: String) -> Self {
-        Self {
-            title,
-            body,
-        }
+    pub fn decrypt_bytes(&self, bytes: Vec<u8>) -> Result<Vec<u8>, MagicCryptError> {
+        self.mc.decrypt_bytes_to_bytes(&bytes)
     }
 }
-*/
+
+

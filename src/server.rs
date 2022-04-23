@@ -1,12 +1,18 @@
+use std::borrow::Borrow;
 use std::sync::Arc;
 use std::task::Context;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::Mutex;
 use anyhow::{anyhow, Result};
-use tokio::io::AsyncReadExt;
-use crate::Packet1::Packet1;
+use rand_core::OsRng;
+use ristretto255_dh::{EphemeralSecret, PublicKey, SharedSecret};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use crate::Packet;
+use crate::Packet1::{EnableEncryptionSpec, Packet1};
+use crate::Packet::EnableEncryption;
+use crate::protocol::{from_bytes, to_bytes};
 
 pub struct Server {
     listener: TcpListener,
@@ -42,40 +48,35 @@ impl Server {
 
         Ok(())
     }
-
-    pub fn relay_packets<'a, P: Deserialize<'a>>(self, sender: Sender<P>) -> Result<()> {
-        /*
-                    let mut data = [0 as u8; 5096];
-
-                    while match s.read(&mut data.clone()) {
-                        Ok(size) => {
-                            sender.clone().send(serde_json::from_str::<P>(String::from_utf8_lossy(&data.clone()[0..size]).clone()).unwrap()).unwrap();
-
-                            true
-                        }
-                        Err(_) => {
-                            println!("Terminating: {}", s.peer_addr().unwrap());
-                            s.shutdown(Shutdown::Both).unwrap();
-                            false
-                        }
-                    } {}
-
-                    data = [0 as u8; 5096]; // Reset Buffer
-         */
-
-        Ok(())
-    }
 }
 
 pub struct ClientConnection {
     pub conn: TcpStream,
+    pub server_secret: Option<EphemeralSecret>,
+    pub server_public: Option<PublicKey>,
+    pub server_shared: Option<SharedSecret>,
 }
 
 impl ClientConnection {
     pub fn new(conn: TcpStream) -> Self {
         Self {
             conn,
+            server_secret: None,
+            server_public: None,
+            server_shared: None,
         }
+    }
+
+    pub async fn send_string(&mut self, s: String) -> Result<()> {
+        self.conn.write(s.as_bytes()).await?;
+
+        Ok(())
+    }
+
+    pub async fn send_packet<S: Serialize>(&mut self, packet: S) -> Result<()> {
+        self.conn.write(serde_json::to_string(&packet)?.as_bytes()).await?;
+
+        Ok(())
     }
 
     pub async fn read_incoming_packet(&mut self) -> Result<Packet1> {
@@ -88,6 +89,33 @@ impl ClientConnection {
         }
 
         Err(anyhow!("No packet"))
+    }
+
+    pub async fn enable_encryption(&mut self) -> Result<()> {
+
+        self.server_secret = Some(EphemeralSecret::new(&mut OsRng));
+
+        if let Some(secret) = self.server_secret.borrow() {
+            self.server_public = Some(PublicKey::from(secret));
+        }
+
+        let pack = self.read_incoming_packet().await?;
+
+        if let EnableEncryption(p) = pack {
+            let client_public = from_bytes(p.public);
+
+            if let Some(secret) = &self.server_secret {
+                self.server_shared = Some(secret.diffie_hellman(&client_public));
+            }
+            
+            self.send_packet(Packet::EnableEncryption(EnableEncryptionSpec {
+                public: to_bytes(self.server_public.unwrap())
+            })).await?;
+        } else {
+            return Err(anyhow!("Next Packet was not an Encryption Request!"));
+        }
+
+        Ok(())
     }
 }
 

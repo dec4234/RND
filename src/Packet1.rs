@@ -7,5 +7,8 @@ define_protocol!(1, Packet1, RawPacket1, RawPacket1Body, RawPacket1Kind => {
     },
     Message, 0x01, Both => MessageSpec {
         payload: String
+    },
+    EnableEncryption, 0x02, Both => EnableEncryptionSpec {
+        public: [u8; 32]
     }
 });
