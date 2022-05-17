@@ -9,10 +9,10 @@ use anyhow::{anyhow, Result};
 use rand_core::OsRng;
 use ristretto255_dh::{EphemeralSecret, PublicKey, SharedSecret};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use crate::Packet;
-use crate::Packet1::{EnableEncryptionSpec, Packet1};
-use crate::Packet::EnableEncryption;
-use crate::protocol::{from_bytes, to_bytes};
+use crate::packet;
+use crate::packet::{EnableEncryptionSpec, Packet as Packet1};
+use crate::packet::Packet::EnableEncryption;
+use crate::protocol::{deserialize_raw, from_bytes, to_bytes};
 
 pub struct Server {
     listener: TcpListener,
@@ -108,7 +108,7 @@ impl ClientConnection {
                 self.server_shared = Some(secret.diffie_hellman(&client_public));
             }
             
-            self.send_packet(Packet::EnableEncryption(EnableEncryptionSpec {
+            self.send_packet(EnableEncryption(EnableEncryptionSpec {
                 public: to_bytes(self.server_public.unwrap())
             })).await?;
         } else {
@@ -117,10 +117,4 @@ impl ClientConnection {
 
         Ok(())
     }
-}
-
-pub fn deserialize_raw<'a, P: Deserialize<'a>>(buf: &'a [u8], size: usize) -> serde_json::Result<P> {
-    // let s: &str = String::from_utf8_lossy(&buf[0..size]).clone().as_ref();
-
-    serde_json::Result::Ok(serde_json::from_slice(&buf[0..size])).unwrap()
 }

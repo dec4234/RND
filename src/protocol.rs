@@ -2,6 +2,8 @@ use ristretto255_dh::PublicKey;
 use serde::{Deserialize, Serialize};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use anyhow::Result;
+use crate::packet::Packet;
+use async_trait::async_trait;
 
 pub trait PacketKind: Clone + Copy + PartialEq + Eq {
 
@@ -94,4 +96,22 @@ pub fn to_bytes(key: PublicKey) -> [u8; 32] {
 
 pub fn from_bytes(bytes: [u8; 32]) -> PublicKey {
     PublicKey::try_from(bytes).unwrap()
+}
+
+pub fn deserialize_raw<'a, P: Deserialize<'a>>(buf: &'a [u8], size: usize) -> serde_json::Result<P> {
+    // let s: &str = String::from_utf8_lossy(&buf[0..size]).clone().as_ref();
+
+    serde_json::Result::Ok(serde_json::from_slice(&buf[0..size])).unwrap()
+}
+
+#[async_trait]
+pub trait IncomingHandler {
+    fn try_next(&mut self) -> Result<Packet>;
+
+    async fn read_next(&mut self) -> Result<Packet>;
+}
+
+#[async_trait]
+pub trait OutgoingHandler {
+    async fn send_string(&mut self, s: String) -> Result<()>;
 }

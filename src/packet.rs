@@ -1,7 +1,7 @@
 use crate::define_protocol;
 use serde::{Deserialize, Serialize};
 
-define_protocol!(1, Packet1, RawPacket1, RawPacket1Body, RawPacket1Kind => {
+define_protocol!(1, Packet, RawPacket, RawPacketBody, RawPacketKind => {
     Handshake, 0x00, ServerBound => HandshakeSpec {
         payload: i64
     },

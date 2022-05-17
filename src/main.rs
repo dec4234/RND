@@ -11,15 +11,16 @@ use ristretto255_dh::{EphemeralSecret, PublicKey};
 use crate::protocol::{PacketDirection};
 use serde::{Serialize, Deserialize};
 use crate::client::Client;
-use crate::Packet1::MessageSpec;
-use crate::Packet1::Packet1 as Packet;
+use crate::packet::MessageSpec;
+use crate::packet::Packet;
 use crate::server::Server;
 
 pub mod encrypt;
 pub mod protocol;
-pub mod Packet1;
+pub mod packet;
 pub mod server;
 pub mod client;
+pub mod network;
 
 #[tokio::main]
 async fn main() {
@@ -118,6 +119,9 @@ async fn main() {
     }
 }
 
+/*
+Need to make read_next not async to support a 1 call enable_encryption request
+ */
 async fn start_loop() {
     let mut s = Server::new("127.0.0.1:27893").await.unwrap();
     let mut c = Client::new("127.0.0.1:27893").await.unwrap();

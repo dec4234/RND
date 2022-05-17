@@ -5,9 +5,9 @@ use rand_core::OsRng;
 use ristretto255_dh::{EphemeralSecret, PublicKey, SharedSecret};
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use crate::{Encryptor, Packet};
-use crate::Packet1::{EnableEncryptionSpec, Packet1};
-use crate::Packet::EnableEncryption;
+use crate::{Encryptor, packet};
+use crate::packet::{EnableEncryptionSpec, Packet as Packet1};
+use crate::packet::Packet::EnableEncryption;
 use crate::protocol::{from_bytes, to_bytes};
 use crate::server::deserialize_raw;
 
@@ -34,7 +34,7 @@ impl Client {
         Ok(())
     }
 
-    pub async fn read_incoming_packet(&mut self) -> Result<Packet1> {
+    pub async fn read_next(&mut self) -> Result<Packet1> {
         let mut data = [0 as u8; 5096];
 
         let r = self.conn.stream.read(&mut data).await;
@@ -56,7 +56,7 @@ impl Client {
         }
 
         // 2. Send Tokens to Server
-        self.send_packet(Packet::EnableEncryption(EnableEncryptionSpec {
+        self.send_packet(EnableEncryption(EnableEncryptionSpec {
             public: to_bytes(self.conn.client_public.unwrap()),
         })).await?;
 
@@ -65,7 +65,7 @@ impl Client {
 
     pub async fn enable_encryption_final(&mut self) -> Result<()> {
         // 3. Receive Encryption Packet from server and set shared secret
-        let pack = self.read_incoming_packet().await?;
+        let pack = self.read_next().await?;
 
         if let EnableEncryption(p) = pack {
             let server_public = from_bytes(p.public);
@@ -82,7 +82,7 @@ impl Client {
     }
 
     pub async fn test_encryption(&mut self) -> Result<()> {
-
+        todo!()
     }
 }
 
