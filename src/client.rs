@@ -8,8 +8,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use crate::{Encryptor, packet};
 use crate::packet::{EnableEncryptionSpec, Packet as Packet1};
 use crate::packet::Packet::EnableEncryption;
-use crate::protocol::{from_bytes, to_bytes};
-use crate::server::deserialize_raw;
+use crate::protocol::{deserialize_raw, from_bytes, to_bytes};
 
 pub struct Client {
     conn: ServerConnection,

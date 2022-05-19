@@ -106,7 +106,7 @@ pub fn deserialize_raw<'a, P: Deserialize<'a>>(buf: &'a [u8], size: usize) -> se
 
 #[async_trait]
 pub trait IncomingHandler {
-    fn try_next(&mut self) -> Result<Packet>;
+    fn try_read(&mut self) -> Result<Packet>;
 
     async fn read_next(&mut self) -> Result<Packet>;
 }
