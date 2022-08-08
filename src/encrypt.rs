@@ -6,6 +6,7 @@ pub struct Encryptor {
 }
 
 impl Encryptor {
+    /// The Ket Should be the Shared Secret
     pub fn new(key: String) -> Self {
         Self {
             mc: new_magic_crypt!(key.as_str(), 128),
