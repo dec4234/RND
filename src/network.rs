@@ -2,14 +2,15 @@ use std::borrow::Borrow;
 use crate::protocol::{from_bytes, IncomingHandler, OutgoingHandler, to_bytes};
 use async_trait::async_trait;
 use serde::Serialize;
-use crate::{Encryptor, Packet};
+use crate::{Encryptor, MessageSpec, Packet};
 use anyhow::{anyhow, Result};
 use rand_core::OsRng;
 use ristretto255_dh::{EphemeralSecret, PublicKey, SharedSecret};
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use crate::Packet::EnableEncryption;
 use crate::packet::EnableEncryptionSpec;
+use log::{info};
 
 pub struct Client {
     pub stream: TcpStream,
@@ -31,7 +32,11 @@ impl Client {
     }
 
     pub async fn send_packet<S: Serialize>(&mut self, packet: S) -> Result<()> {
-        self.stream.write(serde_json::to_string(&packet)?.as_bytes()).await?;
+        if let Some(encryptor) = &self.encryptor {
+            self.stream.write(encryptor.encrypt(serde_json::to_string(&packet)?).as_bytes());
+        } else {
+            self.stream.write(serde_json::to_string(&packet)?.as_bytes()).await?;
+        }
 
         Ok(())
     }
@@ -54,7 +59,7 @@ impl Client {
             EnableEncryption(EnableEncryptionSpec { public }) => {
                 if let Some(secret) = &self.client_secret {
                     self.client_shared = Some(secret.diffie_hellman(&from_bytes(public)));
-                    self.encryptor = Some(Encryptor::from_bytes(public)); // Figure out how to plug SharedSecret into encryptor
+                    self.encryptor = Some(Encryptor::from_bytes(public));
                 }
             }
             _ => {
@@ -62,13 +67,15 @@ impl Client {
             }
         }
 
+        info!("Enabled encryption");
+
         Ok(())
     }
 }
 
 #[async_trait]
 impl IncomingHandler for Client {
-    fn try_read(&mut self) -> Result<Packet> {
+    async fn try_read(&mut self) -> Result<Packet> {
         let mut data = [0 as u8; 5096];
 
         if let Ok(size) = self.stream.try_read(&mut data) {
@@ -81,14 +88,24 @@ impl IncomingHandler for Client {
     }
 
     async fn read_next(&mut self) -> Result<Packet> {
-        todo!()
+        let mut data = [0 as u8; 5096];
+
+        if let Ok(size) = self.stream.read(&mut data).await {
+            let packet: Packet = serde_json::from_slice(&data[..size])?;
+
+            return Ok(packet);
+        }
+
+        Err(anyhow!("No packet"))
     }
 }
 
 #[async_trait]
 impl OutgoingHandler for Client {
     async fn send_string(&mut self, s: String) -> Result<()> {
-        todo!()
+        self.send_packet(Packet::Message(MessageSpec {
+            payload: s,
+        })).await
     }
 }
 
@@ -123,21 +140,29 @@ impl ClientConnection {
             self.conn.write(serde_json::to_string(&packet)?.as_bytes()).await?;
         }
 
-        self.conn.write(serde_json::to_string(&packet)?.as_bytes()).await?;
+        // self.conn.write(serde_json::to_string(&packet)?.as_bytes()).await?;
 
         Ok(())
     }
 
-    async fn analyze_encryption_request(&mut self, packet: Packet) {
+    async fn analyze_encryption_request(&mut self, packet: &Packet) {
         if let EnableEncryption(EnableEncryptionSpec { public }) = packet {
             // generate tokens and stuff here
+            self.server_secret = Some(EphemeralSecret::new(&mut OsRng));
 
-            self.server_secret = Some(EphemeralSecret::from(public));
-            // self.server_public = Some(PublicKey::from(self.server_secret.unwrap()));
-            // self.server_shared = Some(SharedSecret::from(self.server_secret.unwrap(), self.server_public.unwrap()));
-            // self.encryptor = Some(Encryptor::new(self.server_shared.unwrap()));
+            if let Some(secret) = self.server_secret.borrow() {
+                self.server_public = Some(PublicKey::from(secret));
+            }
+
+            if let Some(secret) = &self.server_secret {
+                self.server_shared = Some(secret.diffie_hellman(&from_bytes(public.clone())));
+                self.encryptor = Some(Encryptor::from_bytes(public.clone()));
+            }
 
             // return server public key to the client
+            self.send_packet(EnableEncryption(EnableEncryptionSpec {
+                public: to_bytes(self.server_public.unwrap()),
+            })).await.unwrap();
         }
     }
 }
@@ -145,17 +170,39 @@ impl ClientConnection {
 #[async_trait]
 impl OutgoingHandler for ClientConnection {
     async fn send_string(&mut self, s: String) -> Result<()> {
-        todo!()
+        self.send_packet(Packet::Message(MessageSpec {
+            payload: s,
+        })).await
     }
 }
 
 #[async_trait]
 impl IncomingHandler for ClientConnection {
-    fn try_read(&mut self) -> Result<Packet> {
-        todo!()
+    async fn try_read(&mut self) -> Result<Packet> {
+        let mut data = [0 as u8; 5096];
+
+        if let Ok(size) = self.conn.try_read(&mut data) {
+            let packet: Packet = serde_json::from_slice(&data[..size])?;
+
+            self.analyze_encryption_request(&packet).await;
+
+            return Ok(packet);
+        }
+
+        Err(anyhow!("No packet"))
     }
 
     async fn read_next(&mut self) -> Result<Packet> {
-        todo!()
+        let mut data = [0 as u8; 5096];
+
+        if let Ok(size) = self.conn.read(&mut data).await {
+            let packet: Packet = serde_json::from_slice(&data[..size])?;
+
+            self.analyze_encryption_request(&packet);
+
+            return Ok(packet);
+        }
+
+        Err(anyhow!("No packet"))
     }
 }

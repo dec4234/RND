@@ -24,6 +24,8 @@ pub mod network;
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+
     start_loop().await;
 }
 
