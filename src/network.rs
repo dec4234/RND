@@ -1,4 +1,6 @@
 use std::borrow::Borrow;
+use std::sync::Arc;
+use std::thread;
 use crate::protocol::{from_bytes, IncomingHandler, OutgoingHandler, to_bytes};
 use async_trait::async_trait;
 use serde::Serialize;
@@ -11,6 +13,8 @@ use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use crate::Packet::EnableEncryption;
 use crate::packet::EnableEncryptionSpec;
 use log::{info};
+use tokio::sync::mpsc::{Receiver, Sender};
+use tokio::sync::{mpsc, Mutex};
 
 pub struct Client {
     pub stream: TcpStream,
@@ -111,16 +115,32 @@ impl OutgoingHandler for Client {
 
 
 pub struct Server {
-    listener: TcpListener,
-    connections: Vec<ClientConnection>,
+    listener: Arc<TcpListener>,
+    connections: Arc<Mutex<Vec<ClientConnection>>>,
 }
 
 impl Server {
     pub async fn new<A: ToSocketAddrs>(addr: A) -> Result<Self> {
         Ok(Self {
-            listener: TcpListener::bind(addr).await?,
-            connections: Vec::new(),
+            listener: Arc::new(TcpListener::bind(addr).await?),
+            connections: Arc::new(Mutex::new(Vec::new())),
         })
+    }
+
+    pub fn accept_new_connections(&self) {
+        let listener = self.listener.clone();
+        let connections = self.connections.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let conn = listener.accept().await;
+
+                if let Ok(conn) = conn {
+                    let client = ClientConnection::new(conn.0); // Lost Info: Socket Address
+                    connections.lock().await.push(client);
+                }
+            }
+        });
     }
 }
 
@@ -130,9 +150,21 @@ pub struct ClientConnection {
     pub server_public: Option<PublicKey>,
     pub server_shared: Option<SharedSecret>,
     encryptor: Option<Encryptor>,
+    pub channel: (Sender<Packet>, Receiver<Packet>),
 }
 
 impl ClientConnection {
+    pub fn new(conn: TcpStream) -> Self {
+        Self {
+            conn,
+            server_secret: None,
+            server_public: None,
+            server_shared: None,
+            encryptor: None,
+            channel: mpsc::channel(4096),
+        }
+    }
+
     pub async fn send_packet<S: Serialize>(&mut self, packet: S) -> Result<()> {
         if let Some(encryptor) = &self.encryptor {
             self.conn.write(encryptor.encrypt(serde_json::to_string(&packet)?).as_bytes());
@@ -143,6 +175,19 @@ impl ClientConnection {
         // self.conn.write(serde_json::to_string(&packet)?.as_bytes()).await?;
 
         Ok(())
+    }
+
+    pub async fn receive_packets(&mut self) {
+        let send = self.channel.0.clone();
+
+        tokio::spawn(async move {
+            loop {
+                let packet = self.read_next().await;
+                if let Ok(packet) = packet {
+                    send.send(packet).await.unwrap();
+                }
+            }
+        });
     }
 
     async fn analyze_encryption_request(&mut self, packet: &Packet) {
@@ -205,4 +250,8 @@ impl IncomingHandler for ClientConnection {
 
         Err(anyhow!("No packet"))
     }
+}
+
+pub struct PacketContainer {
+
 }

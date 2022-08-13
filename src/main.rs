@@ -10,10 +10,9 @@ use uuid::Uuid;
 use ristretto255_dh::{EphemeralSecret, PublicKey};
 use crate::protocol::{PacketDirection};
 use serde::{Serialize, Deserialize};
-use crate::client::Client;
+use crate::network::{Client, Server};
 use crate::packet::MessageSpec;
 use crate::packet::Packet;
-use crate::server::Server;
 
 pub mod encrypt;
 pub mod protocol;
@@ -36,32 +35,7 @@ async fn start_loop() {
     let mut s = Server::new("127.0.0.1:27893").await.unwrap();
     let mut c = Client::new("127.0.0.1:27893").await.unwrap();
 
-    let mut cc = s.accept().await.unwrap();
 
-    // Enable encryption
-    c.enable_encryption().await.unwrap();
-    cc.enable_encryption().await.unwrap();
-    c.enable_encryption_final().await.unwrap();
-
-    loop {
-        c.send_packet(Packet::Message(MessageSpec {
-            payload: String::from("Hey lhbglhasbgfhbldjfbgljrhbgtilhbgljvbljbfg")
-        })).await.unwrap();
-
-        let p = cc.read_incoming_packet().await.unwrap();
-
-        match p {
-            Packet::Handshake(payload) => {
-                println!("{}", payload.payload);
-            }
-            Packet::Message(payload) => {
-                println!("{}", payload.payload);
-            }
-            _ => {}
-        }
-
-        thread::sleep(Duration::from_secs(3));
-    }
 }
 
 
