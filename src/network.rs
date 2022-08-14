@@ -1,6 +1,7 @@
 use std::borrow::Borrow;
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 use crate::protocol::{from_bytes, IncomingHandler, OutgoingHandler, to_bytes};
 use async_trait::async_trait;
 use serde::Serialize;
@@ -116,7 +117,7 @@ impl OutgoingHandler for Client {
 
 pub struct Server {
     listener: Arc<TcpListener>,
-    connections: Arc<Mutex<Vec<ClientConnection>>>,
+    connections: Arc<Mutex<Vec<Arc<Mutex<ClientConnection>>>>>,
 }
 
 impl Server {
@@ -154,20 +155,24 @@ pub struct ClientConnection {
 }
 
 impl ClientConnection {
-    pub fn new(conn: TcpStream) -> Self {
-        Self {
-            conn,
-            server_secret: None,
-            server_public: None,
-            server_shared: None,
-            encryptor: None,
-            channel: mpsc::channel(4096),
-        }
+    pub fn new(conn: TcpStream) -> Arc<Mutex<Self>> {
+        Arc::new(
+            Mutex::new(
+                Self {
+                    conn,
+                    server_secret: None,
+                    server_public: None,
+                    server_shared: None,
+                    encryptor: None,
+                    channel: mpsc::channel(4096),
+                }
+            )
+        )
     }
 
     pub async fn send_packet<S: Serialize>(&mut self, packet: S) -> Result<()> {
         if let Some(encryptor) = &self.encryptor {
-            self.conn.write(encryptor.encrypt(serde_json::to_string(&packet)?).as_bytes());
+            self.conn.write(encryptor.encrypt(serde_json::to_string(&packet)?).as_bytes()).await?;
         } else {
             self.conn.write(serde_json::to_string(&packet)?.as_bytes()).await?;
         }
@@ -177,15 +182,17 @@ impl ClientConnection {
         Ok(())
     }
 
-    pub async fn receive_packets(&mut self) {
-        let send = self.channel.0.clone();
+    pub async fn receive_packets(sel: Arc<Mutex<Self>>) {
+        let send = sel.lock().await.channel.0.clone();
 
         tokio::spawn(async move {
             loop {
-                let packet = self.read_next().await;
+                let packet = sel.lock().await.try_read().await;
                 if let Ok(packet) = packet {
                     send.send(packet).await.unwrap();
                 }
+
+                thread::sleep(Duration::from_millis(20)); // Sleep so mutex isn't locked all the time
             }
         });
     }
