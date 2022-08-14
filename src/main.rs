@@ -8,7 +8,7 @@ use rand_core::OsRng;
 use crate::encrypt::{Encryptor};
 use uuid::Uuid;
 use ristretto255_dh::{EphemeralSecret, PublicKey};
-use crate::protocol::{PacketDirection};
+use crate::protocol::{OutgoingHandler, PacketDirection};
 use serde::{Serialize, Deserialize};
 use crate::network::{Client, Server};
 use crate::packet::MessageSpec;
@@ -33,9 +33,33 @@ Need to make read_next not async to support a 1 call enable_encryption request
  */
 async fn start_loop() {
     let mut s = Server::new("127.0.0.1:27893").await.unwrap();
+    s.accept_new_connections();
     let mut c = Client::new("127.0.0.1:27893").await.unwrap();
+    c.enable_encryption().await.unwrap();
 
+    let sc = s.connections.clone();
 
+    loop {
+        c.send_string(String::from("ABCDEFGHIJKLMNOPQRSTUVWXYZ123456789")).await.unwrap();
+
+        let lock = sc.lock().await;
+
+        if let Some(conn) = lock.get(0) {
+            let r = &mut conn.lock().await.channel.1;
+
+            if let Ok(packet) = r.try_recv() {
+                match packet {
+                    Packet::Handshake(_) => {}
+                    Packet::Message(m) => {
+                        println!("{}", m.payload);
+                    }
+                    Packet::EnableEncryption(_) => {}
+                }
+            }
+        }
+
+        thread::sleep(Duration::from_millis(1000));
+    }
 }
 
 

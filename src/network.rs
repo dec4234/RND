@@ -38,7 +38,7 @@ impl Client {
 
     pub async fn send_packet<S: Serialize>(&mut self, packet: S) -> Result<()> {
         if let Some(encryptor) = &self.encryptor {
-            self.stream.write(encryptor.encrypt(serde_json::to_string(&packet)?).as_bytes());
+            self.stream.write(encryptor.encrypt(serde_json::to_string(&packet)?).as_bytes()).await?;
         } else {
             self.stream.write(serde_json::to_string(&packet)?.as_bytes()).await?;
         }
@@ -117,7 +117,7 @@ impl OutgoingHandler for Client {
 
 pub struct Server {
     listener: Arc<TcpListener>,
-    connections: Arc<Mutex<Vec<Arc<Mutex<ClientConnection>>>>>,
+    pub connections: Arc<Mutex<Vec<Arc<Mutex<ClientConnection>>>>>,
 }
 
 impl Server {
@@ -138,6 +138,7 @@ impl Server {
 
                 if let Ok(conn) = conn {
                     let client = ClientConnection::new(conn.0); // Lost Info: Socket Address
+                    ClientConnection::receive_packets(client.clone()).await;
                     connections.lock().await.push(client);
                 }
             }
@@ -250,7 +251,7 @@ impl IncomingHandler for ClientConnection {
         if let Ok(size) = self.conn.read(&mut data).await {
             let packet: Packet = serde_json::from_slice(&data[..size])?;
 
-            self.analyze_encryption_request(&packet);
+            self.analyze_encryption_request(&packet).await;
 
             return Ok(packet);
         }
@@ -259,6 +260,10 @@ impl IncomingHandler for ClientConnection {
     }
 }
 
+/// Used to identify the source of a packet
+/// in a public collection channel
+///
+/// Unused
 pub struct PacketContainer {
 
 }
