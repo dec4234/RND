@@ -38,9 +38,13 @@ impl Client {
 
     pub async fn send_packet<S: Serialize>(&mut self, packet: S) -> Result<()> {
         if let Some(encryptor) = &self.encryptor {
-            self.stream.write(encryptor.encrypt(serde_json::to_string(&packet)?).as_bytes()).await?;
+            let s = encryptor.encrypt(serde_json::to_string(&packet)?);
+            info!("Sending: {:?}", s);
+            self.stream.write(s.as_bytes()).await?;
         } else {
-            self.stream.write(serde_json::to_string(&packet)?.as_bytes()).await?;
+            let s = serde_json::to_string(&packet)?;
+            info!("Sending: {:?}", s);
+            self.stream.write(s.as_bytes()).await?;
         }
 
         Ok(())
@@ -81,24 +85,48 @@ impl Client {
 #[async_trait]
 impl IncomingHandler for Client {
     async fn try_read(&mut self) -> Result<Packet> {
-        let mut data = [0 as u8; 5096];
+        let mut data = [0 as u8; 32767];
 
         if let Ok(size) = self.stream.try_read(&mut data) {
-            let packet: Packet = serde_json::from_slice(&data[..size])?;
+            if let Some(encryptor) = &self.encryptor {
+                if let Ok(res) = encryptor.decrypt_bytes(data[..size].to_vec()) {
+                    let packet: Packet = serde_json::from_slice(res.as_slice())?;
 
-            return Ok(packet);
+                    info!("Received: {:?}", packet);
+
+                    return Ok(packet);
+                }
+            } else {
+                let packet: Packet = serde_json::from_slice(&data[..size])?;
+
+                info!("Received: {:?}", packet);
+
+                return Ok(packet);
+            }
         }
 
         Err(anyhow!("No packet"))
     }
 
     async fn read_next(&mut self) -> Result<Packet> {
-        let mut data = [0 as u8; 5096];
+        let mut data = [0 as u8; 32767];
 
         if let Ok(size) = self.stream.read(&mut data).await {
-            let packet: Packet = serde_json::from_slice(&data[..size])?;
+            if let Some(encryptor) = &self.encryptor {
+                if let Ok(res) = encryptor.decrypt_bytes(data[..size].to_vec()) {
+                    let packet: Packet = serde_json::from_slice(res.as_slice())?;
 
-            return Ok(packet);
+                    info!("Received: {:?}", packet);
+
+                    return Ok(packet);
+                }
+            } else {
+                let packet: Packet = serde_json::from_slice(&data[..size])?;
+
+                info!("Received: {:?}", packet);
+
+                return Ok(packet);
+            }
         }
 
         Err(anyhow!("No packet"))
@@ -165,7 +193,7 @@ impl ClientConnection {
                     server_public: None,
                     server_shared: None,
                     encryptor: None,
-                    channel: mpsc::channel(4096),
+                    channel: mpsc::channel(32767),
                 }
             )
         )
@@ -173,9 +201,13 @@ impl ClientConnection {
 
     pub async fn send_packet<S: Serialize>(&mut self, packet: S) -> Result<()> {
         if let Some(encryptor) = &self.encryptor {
-            self.conn.write(encryptor.encrypt(serde_json::to_string(&packet)?).as_bytes()).await?;
+            let s = encryptor.encrypt(serde_json::to_string(&packet)?);
+            info!("Sending: {:?}", s);
+            self.conn.write(s.as_bytes()).await?;
         } else {
-            self.conn.write(serde_json::to_string(&packet)?.as_bytes()).await?;
+            let s = serde_json::to_string(&packet)?;
+            info!("Sending: {:?}", s);
+            self.conn.write(s.as_bytes()).await?;
         }
 
         // self.conn.write(serde_json::to_string(&packet)?.as_bytes()).await?;
@@ -232,28 +264,52 @@ impl OutgoingHandler for ClientConnection {
 #[async_trait]
 impl IncomingHandler for ClientConnection {
     async fn try_read(&mut self) -> Result<Packet> {
-        let mut data = [0 as u8; 5096];
+        let mut data = [0 as u8; 32767];
 
         if let Ok(size) = self.conn.try_read(&mut data) {
-            let packet: Packet = serde_json::from_slice(&data[..size])?;
+            if let Some(encryptor) = &self.encryptor {
+                if let Ok(res) = encryptor.decrypt_bytes(data[..size].to_vec()) {
+                    let packet: Packet = serde_json::from_slice(res.as_slice())?;
 
-            self.analyze_encryption_request(&packet).await;
+                    info!("Received: {:?}", packet);
 
-            return Ok(packet);
+                    return Ok(packet);
+                }
+            } else {
+                let packet: Packet = serde_json::from_slice(&data[..size])?;
+
+                info!("Received: {:?}", packet);
+
+                self.analyze_encryption_request(&packet).await;
+
+                return Ok(packet);
+            }
         }
 
         Err(anyhow!("No packet"))
     }
 
     async fn read_next(&mut self) -> Result<Packet> {
-        let mut data = [0 as u8; 5096];
+        let mut data = [0 as u8; 32767];
 
         if let Ok(size) = self.conn.read(&mut data).await {
-            let packet: Packet = serde_json::from_slice(&data[..size])?;
+            if let Some(encryptor) = &self.encryptor {
+                if let Ok(res) = encryptor.decrypt_bytes(data[..size].to_vec()) {
+                    let packet: Packet = serde_json::from_slice(res.as_slice())?;
 
-            self.analyze_encryption_request(&packet).await;
+                    info!("Received: {:?}", packet);
 
-            return Ok(packet);
+                    return Ok(packet);
+                }
+            } else {
+                let packet: Packet = serde_json::from_slice(&data[..size])?;
+
+                info!("Received: {:?}", packet);
+
+                self.analyze_encryption_request(&packet).await;
+
+                return Ok(packet);
+            }
         }
 
         Err(anyhow!("No packet"))
